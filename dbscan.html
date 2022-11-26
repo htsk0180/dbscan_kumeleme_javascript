@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>urbangb dataseti ile dbscan kümeleme</title>
+</head>
+<body>
+    <script>
+        var data = []; // data'yı tutacak dizi oluşturduk.
+        var dataFile = "urbanGB.txt"; // data'yı tutan dosya adı
+        var req = new XMLHttpRequest(); // XMLHttpRequest nesnesi oluşturduk.
+        req.open("GET", dataFile, false); // dosyayı okumak için GET isteği yolladık.
+        req.send(null); // isteği gönderdik.
+        var data = req.responseText.split("\n"); // gelen cevabı satır satır ayırdık.
+        data = data.map(function (row) { // her satırı virgüle göre ayırdık.
+            return row.split(",");
+        });
+        data = data.map(function (row) { // her satırı sayıya çevirdik.
+            return row.map(function (value) {
+                return parseFloat(value);
+            });
+        });
+        document.write("Yüklenen toplam data sayısı : " + data.length + " satır<br>"); // data'yı ekrana yazdırdık.
+
+        // datanın ilk 10 satırını ekrana yazdırdık.
+        for (var i = 0; i < 10; i++) {
+            document.write(data[i] + "<br>");
+        }
+        
+        // verinin ilk kaç satırının kullanılacağını kullanıcıdan alıyoruz.
+        var dataCount = prompt("Kaç satır kullanılsın?", "100");
+        data = data.slice(0, dataCount); // verinin ilk dataCount satırını alıyoruz.
+        document.write("Kullanılan data sayısı : " + data.length + " satır<br>"); // data'yı ekrana yazdırdık.
+
+        /**********************/
+        // DBSCAN ALGORİTMASI //
+        /* 1-) Daha önce “ziyaret edilmemiş” keyfi bir başlangıç noktası seçilir.
+           2-) Bu noktanın epsilon komşuluğundaki noktalar bulunur.
+           3-) Eğer komşu sayısı yeterli ise öbekleme işlemine başlanır ve bu nokta “ziyaret edildi” olarak işaretlenir,
+               komşu sayısı yeterli değil ise de “gürültü (noise)” olarak işaretlenir 
+               (Gürültü olarak işaretlenen noktalar daha sonra bir öbeğe ait olabilir).
+           4-) Eğer bir öbeğe ait bir nokta bulunur ise, bu noktanın epsilon komşuluğu da öbeğe dahil edilir,
+               2.adım komşuluktaki tüm noktalar için tekrar edilir.
+           5-) Yeni bir ziyaret edilmemiş nokta bulunur ve işlenir (gürültü ya da ziyaret edildi olarak işaretlenir.).
+           6-) Tüm noktalar ziyaret edildi olarak işaretlenene kadar bu işlemler tekrar edilir.*/
+        /**********************/
+        
+        // epsilon ve minPts parametrelerini kullanıcıdan alıyoruz.
+        var epsilon = parseFloat(prompt("epsilon değeri giriniz : ")); // epsilon değeri
+        var minPts = parseInt(prompt("minPts değeri giriniz : ")); // minPts değeri
+
+        // epsilon ve minPts değerlerini ekrana yazdırdık.
+        document.write("epsilon : " + epsilon + "<br>"); // epsilon değeri
+        document.write("minPts : " + minPts + "<br>"); // minPts değeri
+
+        // DBSCAN fonksiyonu
+        function dbscan(data, epsilon, minPts) { // data, epsilon ve minPts parametreleri
+            var C = 0; // küme numarası
+            var visited = []; // ziyaret edilmiş verileri tutacak dizi
+            var noise = []; // gürültü verileri
+            var clusters = []; // küme verileri
+            var n = data.length; // veri sayısı
+            for (var i = 0; i < n; i++) { // verileri dolaşıyoruz.
+                if (visited[i]) continue; // ziyaret edilmişse atlıyoruz. 
+                visited[i] = true; // ziyaret edildi olarak işaretliyoruz.
+                var Neighbors = regionQuery(data, i, epsilon); // epsilon çevresindeki komşuları buluyoruz.
+                if (Neighbors.length < minPts) { // komşu sayısı minPts'ten küçükse gürültü olarak işaretliyoruz.
+                    noise.push(i); // gürültüye ekliyoruz.
+                } else { // komşu sayısı minPts'ten büyükse yeni bir küme oluşturuyoruz.
+                    C++; // küme numarasını arttırıyoruz.
+                    clusters[C] = []; // yeni küme oluşturuyoruz.
+                    expandCluster(data, C, i, Neighbors, epsilon, minPts, visited, clusters); // yeni küme oluşturuyoruz.
+                }
+            }
+            return [C, clusters, noise]; // küme sayısı, küme verileri ve gürültü verilerini döndürüyoruz.
+        }
+
+        // epsilon çevresindeki komşuları bulan fonksiyon
+        function regionQuery(data, i, epsilon) { // veri, veri numarası, epsilon parametreleri
+            var n = data.length; // veri sayısı
+            var Neighbors = []; // komşuları tutacak dizi
+            for (var j = 0; j < n; j++) { // verileri dolaşıyoruz.
+                if (i == j) continue; // kendisine eşitse atlıyoruz.
+                if (distance(data[i], data[j]) <= epsilon) { // i ve j arasındaki uzaklık epsilon'dan küçükse komşu olarak işaretliyoruz.
+                    Neighbors.push(j); // komşu olarak işaretlediğimiz veriyi diziye ekliyoruz.
+                }
+            }
+            return Neighbors; // komşuları döndürüyoruz.
+        }
+
+        // i ve j arasındaki uzaklığı bulan fonksiyon
+        function distance(i, j) { // i ve j parametreleri
+            var d = 0; // uzaklık
+            var m = i.length; // i verisinin boyutu
+            for (var k = 0; k < m; k++) { // i verisinin boyutu kadar dolaşıyoruz.
+                d += Math.pow(i[k] - j[k], 2); // i ve j verilerinin k. elemanlarının farkının karesini d'ye ekliyoruz.
+            }
+
+            return Math.sqrt(d); // i ve j arasındaki uzaklığı döndürüyoruz.
+
+        }
+
+        // küme oluşturan fonksiyon
+        function expandCluster(data, C, i, Neighbors, epsilon, minPts, visited, clusters) { // veri, küme numarası, veri numarası, komşular, epsilon, minPts, ziyaret edilmiş veriler, küme verileri parametreleri
+            clusters[C].push(i); // i'yi kümeye ekliyoruz.
+            var k = 0; // komşu numarası
+            while (k < Neighbors.length) { // komşuları dolaşıyoruz.
+                var j = Neighbors[k]; // komşu numarasını j'ye atıyoruz.
+                if (!visited[j]) { // ziyaret edilmediyse
+                    visited[j] = true; // ziyaret edildi olarak işaretliyoruz.
+                    var Neighbors2 = regionQuery(data, j, epsilon); // j'nin komşularını buluyoruz.
+                    if (Neighbors2.length >= minPts) { // komşu sayısı minPts'ten büyükse
+                        Neighbors = Neighbors.concat(Neighbors2); // komşuları birleştiriyoruz.
+                    }
+                }
+                if (clusters[C].indexOf(j) == -1) { // j kümede yoksa
+                    clusters[C].push(j); // j'yi kümeye ekliyoruz.
+                }
+                k++; // komşu numarasını arttırıyoruz.
+            }
+        }
+
+        // dbscan fonksiyonunu çalıştırıyoruz.
+        var result = dbscan(data, epsilon, minPts); // dbscan fonksiyonunu çalıştırıyoruz.
+        var C = result[0]; // küme sayısı
+        var clusters = result[1]; // küme verileri
+        var noise = result[2]; // gürültü verileri
+
+        // küme sayısını ekrana yazdırdık.
+        document.write("Küme sayısı : " + C + "<br>");
+
+        // küme verilerini ekrana yazdırdık.
+        for (var i = 1; i <= C; i++) {
+            document.write("Küme " + i + " : " + clusters[i] + "<br>");
+        }
+
+        // her kümenin eleman sayısını ekrana yazdır
+        for (var i = 1; i <= C; i++) {
+            document.write("Küme " + i + " eleman sayısı : " + clusters[i].length + "<br>");
+        }
+
+        // gürültü verilerinin sayısını ekrana yazdır
+        document.write("Gürültü verilerinin sayısı : " + noise.length + "<br>");
+
+        // gürültü verilerini ekrana yazdır
+        document.write("Gürültü : " + noise + "<br>");
+
+        // kullanıcının girdiği verinin index'inin varsa kümesini yoksa gürültü olduğunu ekrana yazdır
+        var index = prompt("Verinin index'ini giriniz : ");
+        if (index < 0 || index >= data.length) {
+            document.write("İndex numarasını girdiğiniz veri kümede veya gürültüde yok.");
+        } else {
+            var flag = false;
+            for (var i = 1; i <= C; i++) {
+                if (clusters[i].indexOf(parseInt(index)) != -1) {
+                    document.write("İndex numarasını girdiğiniz veri küme " + i + "'de bulunuyor.");
+                    flag = true;
+                    break;
+                }
+            }
+            if (!flag) {
+                document.write("İndex numarasını girdiğiniz veri gürültüde bulunuyor.");
+            }
+        }
+
+       // her kümenin elemanları sadece bir renk olacak şekilde farklı küme renkleri kullanarak ekrana yazdır
+        var colors = ["red", "green", "blue", "yellow", "orange", "purple", "pink", "brown", "black", "gray"];
+        for (var i = 1; i <= C; i++) {
+            document.write("<br><br>Küme " + i + " : <br>");
+            for (var j = 0; j < clusters[i].length; j++) {
+                document.write("<span style='color:" + colors[i - 1] + "'>" + data[clusters[i][j]] + "</span><br>");
+            }
+        }
+
+        // gürültü verileri kırmızı renkte ekrana yazdır
+        document.write("<br><br>Gürültü : <br>");
+        for (var i = 0; i < noise.length; i++) {
+            document.write("<span style='color:red'>" + data[noise[i]] + "</span><br>");
+        }
+        
+    </script>
+</body>
+</html>
